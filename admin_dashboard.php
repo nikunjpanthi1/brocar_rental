@@ -9,20 +9,28 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
 
 $msg = "";
 
+// Helper function for fuel type text
+function getFuelTypeText($fuel) {
+    $map = [
+        'petrol' => 'Petrol',
+        'diesel' => 'Diesel',
+        'ev' => 'Electric',
+    ];
+    return $map[$fuel] ?? ucfirst($fuel);
+}
+
 // DELETE IMAGE (from additional images)
 if (isset($_GET['delete_image_id'])) {
     $delImgId = (int)$_GET['delete_image_id'];
 
-    // Fetch filename to delete physical file
     $res = $conn->prepare("SELECT image_path FROM car_images WHERE image_id = ?");
     $res->bind_param("i", $delImgId);
     $res->execute();
     $result = $res->get_result();
     if ($row = $result->fetch_assoc()) {
-        @unlink("images/" . $row['image_path']); // suppress warning if missing
+        @unlink("images/" . $row['image_path']);
     }
 
-    // Delete record
     $stmtDel = $conn->prepare("DELETE FROM car_images WHERE image_id = ?");
     $stmtDel->bind_param("i", $delImgId);
     $stmtDel->execute();
@@ -46,7 +54,6 @@ if (isset($_POST['add_car'])) {
     $quantity = (int)$_POST['quantity'];
     $details = $_POST['details'] ?? '';
 
-    // Handle cover image upload
     $coverImage = "";
     if (isset($_FILES['cover_image']) && $_FILES['cover_image']['error'] === 0) {
         $coverImage = uniqid('cover_') . '_' . basename($_FILES['cover_image']['name']);
@@ -60,7 +67,6 @@ if (isset($_POST['add_car'])) {
 
     $car_id = $stmt->insert_id;
 
-    // Handle multiple additional images
     if (isset($_FILES['additional_images'])) {
         $files = $_FILES['additional_images'];
         for ($i = 0; $i < count($files['name']); $i++) {
@@ -70,7 +76,6 @@ if (isset($_POST['add_car'])) {
                 $filename = uniqid('carimg_') . '.' . $ext;
                 move_uploaded_file($tmp_name, "images/" . $filename);
 
-                // For now label empty
                 $label = "";
 
                 $stmtImg = $conn->prepare("INSERT INTO car_images (car_id, image_path, label) VALUES (?, ?, ?)");
@@ -99,22 +104,19 @@ if (isset($_POST['edit_car'])) {
     $quantity = (int)$_POST['quantity'];
     $details = $_POST['details'] ?? '';
 
-    // Check if new cover image uploaded
     if (isset($_FILES['cover_image']) && $_FILES['cover_image']['error'] === 0) {
         $coverImage = uniqid('cover_') . '_' . basename($_FILES['cover_image']['name']);
         move_uploaded_file($_FILES['cover_image']['tmp_name'], "images/" . $coverImage);
-        // Update with new image
+
         $stmt = $conn->prepare("UPDATE cars SET brand=?, model=?, manufacturer=?, mfgyear=?, seater=?, fuel_type=?, transmission=?, price_per_day=?, image=?, quantity=?, luxury=?, terrain=?, details=? WHERE car_id=?");
         $stmt->bind_param("sssisssdsiissi", $brand, $model, $manufacturer, $mfgyear, $seater, $fuel, $trans, $price, $coverImage, $quantity, $luxury, $terrain, $details, $car_id);
     } else {
-        // No new image uploaded, keep old image
         $stmt = $conn->prepare("UPDATE cars SET brand=?, model=?, manufacturer=?, mfgyear=?, seater=?, fuel_type=?, transmission=?, price_per_day=?, quantity=?, luxury=?, terrain=?, details=? WHERE car_id=?");
         $stmt->bind_param("sssisssdsiisi", $brand, $model, $manufacturer, $mfgyear, $seater, $fuel, $trans, $price, $quantity, $luxury, $terrain, $details, $car_id);
     }
 
     $stmt->execute();
 
-    // Handle additional images upload (optional)
     if (isset($_FILES['additional_images'])) {
         $files = $_FILES['additional_images'];
         for ($i = 0; $i < count($files['name']); $i++) {
@@ -140,7 +142,6 @@ if (isset($_POST['edit_car'])) {
 if (isset($_GET['delete_car'])) {
     $id = (int)$_GET['delete_car'];
 
-    // Delete cover image file from server
     $resImg = $conn->prepare("SELECT image FROM cars WHERE car_id = ?");
     $resImg->bind_param("i", $id);
     $resImg->execute();
@@ -149,7 +150,6 @@ if (isset($_GET['delete_car'])) {
         @unlink("images/" . $row['image']);
     }
 
-    // Delete additional images files from server
     $resImgs = $conn->prepare("SELECT image_path FROM car_images WHERE car_id = ?");
     $resImgs->bind_param("i", $id);
     $resImgs->execute();
@@ -158,14 +158,12 @@ if (isset($_GET['delete_car'])) {
         @unlink("images/" . $imgRow['image_path']);
     }
 
-    // Delete DB records
     $conn->query("DELETE FROM car_images WHERE car_id = $id");
     $conn->query("DELETE FROM cars WHERE car_id = $id");
 
     $msg = "Car deleted!";
 }
 
-// Fetch cars + their additional images count for display
 $cars = $conn->query("SELECT * FROM cars ORDER BY created_at DESC");
 ?>
 
@@ -175,7 +173,7 @@ $cars = $conn->query("SELECT * FROM cars ORDER BY created_at DESC");
 <meta charset="UTF-8" />
 <title>Admin Dashboard - Manage Cars</title>
 <style>
-    body {
+ body {
         font-family: Arial, sans-serif;
         background: #f4f7fa;
         margin: 0;
@@ -460,7 +458,7 @@ $cars = $conn->query("SELECT * FROM cars ORDER BY created_at DESC");
 
     <button id="showAddCarBtn" class="btn">+ Add Car</button>
 
-    <form method="POST" enctype="multipart/form-data" id="addCarForm">
+    <form method="POST" enctype="multipart/form-data" id="addCarForm" style="display:none;">
         <input name="brand" placeholder="Brand" required>
         <input name="model" placeholder="Model" required>
         <input name="manufacturer" placeholder="Manufacturer" required>
@@ -513,12 +511,11 @@ $cars = $conn->query("SELECT * FROM cars ORDER BY created_at DESC");
     <table>
         <thead>
             <tr>
-                <th>Image</th><th>Brand</th><th>Model</th><th>Manufacturer</th><th>Year</th><th>Price</th><th>Quantity</th><th>Actions</th>
+                <th>Image</th><th>Brand</th><th>Model</th><th>Manufacturer</th><th>Year</th><th>Fuel</th><th>Price</th><th>Quantity</th><th>Actions</th>
             </tr>
         </thead>
         <tbody>
         <?php while ($car = $cars->fetch_assoc()):
-            // Fetch additional images for this car
             $stmtImgs = $conn->prepare("SELECT * FROM car_images WHERE car_id = ?");
             $stmtImgs->bind_param("i", $car['car_id']);
             $stmtImgs->execute();
@@ -529,11 +526,12 @@ $cars = $conn->query("SELECT * FROM cars ORDER BY created_at DESC");
             }
         ?>
             <tr data-car='<?= json_encode($car, JSON_HEX_APOS | JSON_HEX_QUOT) ?>' data-images='<?= json_encode($images, JSON_HEX_APOS | JSON_HEX_QUOT) ?>'>
-                <td><img src="images/<?= htmlspecialchars($car['image']) ?>" alt="Car Image"></td>
+                <td><img src="images/<?= htmlspecialchars($car['image']) ?>" alt="Car Image" style="max-width:80px;"></td>
                 <td><?= htmlspecialchars($car['brand']) ?></td>
                 <td><?= htmlspecialchars($car['model']) ?></td>
                 <td><?= htmlspecialchars($car['manufacturer']) ?></td>
                 <td><?= htmlspecialchars($car['mfgyear']) ?></td>
+                <td><?= htmlspecialchars(getFuelTypeText($car['fuel_type'])) ?></td>
                 <td>Rs <?= number_format($car['price_per_day'], 2) ?></td>
                 <td><?= $car['quantity'] ?></td>
                 <td class="actions">
@@ -545,8 +543,6 @@ $cars = $conn->query("SELECT * FROM cars ORDER BY created_at DESC");
         </tbody>
     </table>
 </div>
-
-<!-- Edit Modal -->
 <div id="editModal">
     <div class="modal-content">
         <span class="close" title="Close">&times;</span>
@@ -607,6 +603,7 @@ $cars = $conn->query("SELECT * FROM cars ORDER BY created_at DESC");
         </form>
     </div>
 </div>
+<!-- Edit Modal (keep your existing modal code, with fuel type options as in Add form) -->
 
 <script>
 window.onload = function() {
