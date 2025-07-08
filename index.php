@@ -1,83 +1,103 @@
 <?php
 session_start();
 require 'db.php';
-
-$viewCarId = isset($_GET['view']) ? (int)$_GET['view'] : null;
-
-if ($viewCarId) {
-    $stmt = $conn->prepare("SELECT * FROM cars WHERE car_id = ?");
-    $stmt->bind_param("i", $viewCarId);
-    $stmt->execute();
-    $car = $stmt->get_result()->fetch_assoc();
-
-    $imgStmt = $conn->prepare("SELECT * FROM car_images WHERE car_id = ?");
-    $imgStmt->bind_param("i", $viewCarId);
-    $imgStmt->execute();
-    $carImages = $imgStmt->get_result();
-} else {
-    $search = $_GET['search'] ?? '';
-    $fuel = $_GET['fuel'] ?? '';
-    $trans = $_GET['trans'] ?? '';
-    $seater = $_GET['seater'] ?? '';
-    $terrain = $_GET['terrain'] ?? '';
-    $luxury = $_GET['luxury'] ?? '';
-
-    $query = "SELECT * FROM cars WHERE quantity > 0";
-    if ($search) $query .= " AND (brand LIKE '%$search%' OR model LIKE '%$search%')";
-    if ($fuel) $query .= " AND fuel_type = '$fuel'";
-    if ($trans) $query .= " AND transmission = '$trans'";
-    if ($seater) $query .= " AND seater = '$seater'";
-    if ($terrain) $query .= " AND terrain = '$terrain'";
-    if ($luxury !== '') $query .= " AND luxury = '$luxury'";
-    $query .= " ORDER BY created_at DESC";
-
-    $cars = $conn->query($query);
-}
-
 $userLoggedIn = isset($_SESSION['name']);
-$userName = $_SESSION['name'] ?? '';
-$userType = $_SESSION['user_type'] ?? '';
+$userName     = $_SESSION['name'] ?? '';
+$userType     = $_SESSION['user_type'] ?? '';
+$cars = $conn->query("
+  SELECT *
+  FROM cars
+  WHERE quantity > 0
+  ORDER BY created_at DESC
+  LIMIT 3
+");
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>BroCar Rental</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.css" />
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.css"
+  />
   <style>
-    * {margin: 0; padding: 0; box-sizing: border-box;}
-    body {font-family: 'Segoe UI', sans-serif; background: #fff; color: #333;}
-
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #fff;
+      color: #333;
+    }
     .navbar {
-      background:rgb(3, 27, 23);
+      background: rgb(2, 24, 20);
       padding: 15px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    button{
-      background: #00cc44;
+    .navbar .logo a {
       color: white;
-      border: none;
-      padding: 8px 12px;
-      border-radius: 6px;
-      cursor: pointer;
       font-weight: bold;
+      font-size: 22px;
+      text-decoration: none;
     }
-    .navbar .logo {color: white; font-weight: bold; font-size: 22px;}
-    .nav-links {list-style: none; display: flex; gap: 20px;}
+    .nav-links {
+      list-style: none;
+      display: flex;
+      gap: 20px;
+    }
     .nav-links a {
-      color: white; text-decoration: none; font-weight: 500;
-    }
-    .nav-links a:hover {color: #00cc66;}
-
-    .profile {
       color: white;
-      font-weight: 600;
+      text-decoration: none;
+      font-weight: 500;
     }
-
+    .nav-links a:hover {
+      color: #00cc66;
+    }
+    .profile {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .profile-icon {
+      width: 35px;
+      height: 35px;
+      background: #00cc66;
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .dropdown {
+      position: absolute;
+      top: 45px;
+      right: 0;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      display: none;
+    }
+    .dropdown a {
+      display: block;
+      padding: 10px 15px;
+      color: #333;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .dropdown a:hover {
+      background: #f0f0f0;
+    }
     .hero {
       background: url('images/navbg.jpg') center/cover no-repeat;
       height: 60vh;
@@ -91,30 +111,6 @@ $userType = $_SESSION['user_type'] ?? '';
     .hero h1 {
       font-size: 2.8rem;
     }
-
-    .search-bar {
-      max-width: 700px;
-      margin: 30px auto;
-      display: flex;
-      gap: 10px;
-    }
-    .search-bar input {
-      flex: 1;
-      padding: 10px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      font-size: 1rem;
-    }
-    .search-bar button {
-      padding: 10px 20px;
-      background: #00cc44;
-      border: none;
-      color: white;
-      font-weight: bold;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-
     .cars-container {
       max-width: 1100px;
       margin: 40px auto;
@@ -123,24 +119,24 @@ $userType = $_SESSION['user_type'] ?? '';
       gap: 20px;
       padding: 0 20px;
     }
-
     .car-card {
       background: white;
       border-radius: 10px;
-      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
       overflow: hidden;
       transition: 0.3s;
     }
+    .car-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+    }
     .car-card img {
-  width: 100%;
-  height: 180px;
-  object-fit: contain;
-  background-color: #f0f0f0;
-  border-radius: 8px;
-  display: block;
-  margin: 0 auto;
-}
-
+      width: 100%;
+      height: 180px;
+      object-fit: contain;
+      background-color: #f0f0f0;
+      border-radius: 8px;
+    }
     .car-card .car-content {
       padding: 15px;
     }
@@ -153,7 +149,7 @@ $userType = $_SESSION['user_type'] ?? '';
       font-weight: 700;
       color: #00cc44;
     }
-    .details-btn {
+    .btn {
       display: inline-block;
       margin-top: 10px;
       background: #00796b;
@@ -161,54 +157,75 @@ $userType = $_SESSION['user_type'] ?? '';
       padding: 8px 14px;
       border-radius: 6px;
       text-decoration: none;
+      font-weight: 600;
     }
-
-    .car-details {
+    .btn:hover {
+      background: #005e55;
+    }
+    .see-all-btn {
+      display: block;
+      text-align: center;
+      margin: 30px auto;
+      width: fit-content;
+      background: #004d40;
+      padding: 12px 22px;
+      border-radius: 8px;
+      color: white;
+      font-weight: bold;
+      text-decoration: none;
+    }
+    .details-section {
+      display: none;
       max-width: 800px;
       margin: 40px auto;
-      background: #fff;
+      background: white;
       padding: 20px;
       border-radius: 10px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
     }
-
-    .swiper {
+    .details-section.visible {
+      display: block;
+    }
+    .details-section h2 {
+      margin-bottom: 20px;
+      color: #004d40;
+    }
+    .details-section .swiper {
       width: 100%;
       height: 300px;
       margin-bottom: 20px;
-      border-radius: 10px;
-      overflow: hidden;
     }
-    .swiper-wrapper {
-      display: flex;
-    }
-
-    .swiper-slide img {
+    .details-section .swiper-slide img {
       width: 100%;
       height: 100%;
       object-fit: contain;
     }
-
-    .car-details h2 {
-      color: #004d40;
-      margin-bottom: 20px;
+    .details-section p {
+      margin: 8px 0;
     }
-
-    .car-details p {
-      margin: 10px 0;
-    }
-
-    .btn-back {
+    .details-section .close-details,
+    .details-section .book-now {
       display: inline-block;
       margin-top: 20px;
-      background: #00796b;
-      color: white;
-      padding: 10px 20px;
+      padding: 8px 14px;
       border-radius: 6px;
+      color: white;
       text-decoration: none;
       font-weight: bold;
     }
-
+    .details-section .close-details {
+      background: #dc3545;
+    }
+    .details-section .book-now {
+      background: #00cc66;
+      margin-left: 10px;
+    }
+    .details-section .close-details:hover {
+      background: #c82333;
+    }
+    .details-section .book-now:hover {
+      background: #00994d;
+    }
     footer {
       text-align: center;
       padding: 16px;
@@ -219,23 +236,28 @@ $userType = $_SESSION['user_type'] ?? '';
   </style>
 </head>
 <body>
-
   <nav class="navbar">
-    <div class="logo">BroCar Rental</div>
+    <div class="logo"><a href="index.php">BroCar Rental</a></div>
     <ul class="nav-links">
       <li><a href="index.php">Home</a></li>
-      <li><a href="#">Cars</a></li>
+      <li><a href="cars.php">Cars</a></li>
       <li><a href="#">Contact</a></li>
     </ul>
     <div class="profile">
       <?php if ($userLoggedIn): ?>
-        Hi, <?= htmlspecialchars($userName) ?>
-        <?php if ($userType === 'admin'): ?> |
-          <a href="admin_dashboard.php" style="color:#00cc66;">Admin</a>
-        <?php endif; ?>
-        | <button> <a href="logout.php" style="color:#ff4d4d; text-decoration:none;">Logout</a> </button>
+        <div class="profile-icon" onclick="toggleDropdown()">
+          <?= strtoupper(substr($userName,0,1)) ?>
+        </div>
+        <div id="dropdown" class="dropdown">
+          <a href="profile.php">View Profile</a>
+          <?php if ($userType === 'admin'): ?>
+            <a href="admin_dashboard.php">Admin Panel</a>
+          <?php endif; ?>
+          <a href="logout.php" style="color:#ff4d4d;">Logout</a>
+        </div>
       <?php else: ?>
-        <button> <a href="login.php" style="text-decoration:none;">Login</a> | <a href="signup.php" style="text-decoration:none;">Signup</a></button>
+        <a href="login.php" style="color:white;">Login</a> |
+        <a href="signup.php" style="color:white;">Signup</a>
       <?php endif; ?>
     </div>
   </nav>
@@ -247,79 +269,116 @@ $userType = $_SESSION['user_type'] ?? '';
     </div>
   </section>
 
-  <?php if (!$viewCarId): ?>
-    <form method="GET" class="search-bar">
-      <input type="text" name="search" placeholder="Search brand/model..." value="<?= htmlspecialchars($search ?? '') ?>">
-      <button type="submit">Search</button>
-    </form>
-  <?php endif; ?>
-
   <main>
-    <?php if ($viewCarId && $car): ?>
-      <div class="car-details">
-        <h2><?= htmlspecialchars($car['brand'] . ' ' . $car['model']) ?></h2>
-
-        <?php if ($carImages && $carImages->num_rows > 0): ?>
-          <div class="swiper">
-            <div class="swiper-wrapper">
-              <?php while ($img = $carImages->fetch_assoc()): ?>
-                <div class="swiper-slide">
-                  <img src="images/<?= htmlspecialchars($img['image_path']) ?>" alt="<?= htmlspecialchars($img['label']) ?>">
-                </div>
-              <?php endwhile; ?>
-            </div>
-            <div class="swiper-button-next"></div>
-            <div class="swiper-button-prev"></div>
+    <div class="cars-container" id="car-list">
+      <?php while ($car = $cars->fetch_assoc()): ?>
+        <div class="car-card" data-car-id="<?= $car['car_id'] ?>">
+          <img src="images/<?= htmlspecialchars($car['image']) ?>" alt="">
+          <div class="car-content">
+            <h3><?= htmlspecialchars($car['brand'].' '.$car['model']) ?></h3>
+            <div class="price">Rs <?= number_format($car['price_per_day']) ?>/day</div>
+            <a class="btn see-details">See Details</a>
+            <a class="btn" href="booking.php?car_id=<?= $car['car_id'] ?>">Book Now</a>
           </div>
-        <?php else: ?>
-          <!-- fallback cover image if no additional images -->
-          <img src="images/<?= htmlspecialchars($car['image']) ?>" alt="<?= htmlspecialchars($car['model']) ?>" style="width:100%; height:300px; object-fit:cover; border-radius:10px; margin-bottom:20px;">
-        <?php endif; ?>
+        </div>
+      <?php endwhile; ?>
+    </div>
 
-        <p><strong>Price:</strong> Rs <?= number_format($car['price_per_day']) ?> / day</p>
-        <p><strong>Fuel:</strong> <?= htmlspecialchars($car['fuel_type']) ?></p>
-        <p><strong>Transmission:</strong> <?= htmlspecialchars($car['transmission']) ?></p>
-        <p><strong>Seater:</strong> <?= htmlspecialchars($car['seater']) ?></p>
-        <p><strong>Luxury:</strong> <?= ($car['luxury'] == 1) ? 'Yes' : 'No' ?></p>
-        <p><strong>Terrain:</strong> <?= htmlspecialchars($car['terrain']) ?></p>
-        <p><strong>Details:</strong><br><?= nl2br(htmlspecialchars($car['details'])) ?></p>
+    <a href="cars.php" class="see-all-btn">See All Cars</a>
 
-        <a href="index.php" class="btn-back">&larr; Back to All Cars</a>
+    <div class="details-section" id="detailsSection">
+      <h2 id="detailTitle"></h2>
+      <div class="swiper" id="detail-swiper">
+        <div class="swiper-wrapper" id="detailSwiperWrapper"></div>
+        <div class="swiper-button-prev"></div>
+        <div class="swiper-button-next"></div>
       </div>
-
-    <?php elseif (!$viewCarId && isset($cars)): ?>
-      <div class="cars-container">
-        <?php while ($car = $cars->fetch_assoc()): ?>
-          <div class="car-card">
-            <img src="images/<?= htmlspecialchars($car['image']) ?>" alt="<?= htmlspecialchars($car['model']) ?>">
-            <div class="car-content">
-              <h3><?= htmlspecialchars($car['brand']) ?> <?= htmlspecialchars($car['model']) ?></h3>
-              <div class="price">Rs <?= number_format($car['price_per_day']) ?>/day</div>
-              <a href="index.php?view=<?= $car['car_id'] ?>" class="details-btn">See More</a>
-            </div>
-          </div>
-        <?php endwhile; ?>
-      </div>
-    <?php else: ?>
-      <p style="text-align:center; margin-top: 40px;">No cars found matching your filters.</p>
-    <?php endif; ?>
+      <div id="detailContent"></div>
+      <a href="#" class="close-details" id="closeDetails">Close Details</a>
+      <a href="#" class="book-now" id="bookNowBtn">Book Now</a>
+    </div>
   </main>
 
   <footer>&copy; <?= date('Y') ?> BroCar Rental. All rights reserved.</footer>
 
   <script src="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.js"></script>
   <script>
-    const swiper = new Swiper('.swiper', {
-      loop: true,
-      navigation: {
-        nextEl: '.swiper-button-next',
-        prevEl: '.swiper-button-prev',
-      },
-      autoplay: {
-        delay: 3000,
-        disableOnInteraction: false
+    function toggleDropdown() {
+      const dd = document.getElementById('dropdown');
+      dd.style.display = dd.style.display === 'block' ? 'none' : 'block';
+    }
+    window.onclick = (e) => {
+      if (!e.target.closest('.profile')) {
+        const dd = document.getElementById('dropdown');
+        if (dd) dd.style.display = 'none';
       }
+    };
+
+    let detailSwiper;
+
+    document.querySelectorAll('.see-details').forEach(el => {
+      el.addEventListener('click', async () => {
+        const card = el.closest('.car-card');
+        const carId = card.getAttribute('data-car-id');
+        const resp = await fetch(`get_car_details.php?car_id=${carId}`);
+        const car = await resp.json();
+
+        document.getElementById('detailTitle').textContent = car.brand + ' ' + car.model;
+
+        const wrapper = document.getElementById('detailSwiperWrapper');
+        wrapper.innerHTML = '';
+        if (car.images.length) {
+          document.getElementById('detail-swiper').style.display = '';
+          car.images.forEach(img => {
+            const slide = document.createElement('div');
+            slide.className = 'swiper-slide';
+            slide.innerHTML = `<img src="images/${img.image_path}" alt="">`;
+            wrapper.appendChild(slide);
+          });
+        } else {
+          document.getElementById('detail-swiper').style.display = 'none';
+        }
+
+        document.getElementById('detailContent').innerHTML = `
+          <p><strong>Price:</strong> Rs ${car.price_per_day}/day</p>
+          <p><strong>Fuel:</strong> ${car.fuel_type}</p>
+          <p><strong>Transmission:</strong> ${car.transmission}</p>
+          <p><strong>Seater:</strong> ${car.seater}</p>
+          <p><strong>Luxury:</strong> ${car.luxury == 1 ? 'Yes' : 'No'}</p>
+          <p><strong>Terrain:</strong> ${car.terrain}</p>
+          <p><strong>Details:</strong><br>${car.details.replace(/\n/g, '<br>')}</p>
+        `;
+
+        document.getElementById('bookNowBtn').href = `booking.php?car_id=${carId}`;
+
+        document.getElementById('car-list').style.display = 'none';
+        document.querySelector('.see-all-btn').style.display = 'none';
+        document.getElementById('detailsSection').classList.add('visible');
+
+        if (detailSwiper) {
+          detailSwiper.update();
+        } else {
+          detailSwiper = new Swiper('#detail-swiper', {
+            loop: true,
+            navigation: {
+              nextEl: '.swiper-button-next',
+              prevEl: '.swiper-button-prev',
+            },
+            autoplay: {
+              delay: 3000,
+              disableOnInteraction: false,
+            },
+          });
+        }
+      });
     });
+
+    document.getElementById('closeDetails').onclick = e => {
+      e.preventDefault();
+      document.getElementById('detailsSection').classList.remove('visible');
+      document.getElementById('car-list').style.display = '';
+      document.querySelector('.see-all-btn').style.display = '';
+    };
   </script>
 </body>
 </html>
